@@ -349,7 +349,59 @@ EA's DDS variant with rearranged block data. See section 9.4 for format details.
 
 ---
 
-## 15. Error Handling
+## 15. Rotational Wages Mod (`src/rotational_wages/`)
+
+### 15.1 Problem
+
+In a rotational save, Sims in unplayed households still go to work, but wages do not accrue because the game classifies them as NPCs. `sim_info.is_npc` returns `True` for any Sim whose household is not the currently active one. Career pay is gated at two sites in `career_base.py` with `if not self._sim_info.is_npc` guards.
+
+### 15.2 Eligibility
+
+A Sim's career is eligible for rotational pay if ALL of the following hold:
+
+- `sim_info.is_npc` is `True` (Sim is in a non-active household)
+- `sim_info.household.is_played_household` is `True` (household is a player rotation member)
+- `career.career_category` is one of: `Work (1)`, `TeenPartTime (3)`, `AdultPartTime (5)`
+- `career.on_assignment` is `False` (assignment pay flows through a separate path)
+
+### 15.3 Layer A — Forward fix (in-session pay)
+
+Two hook sites in `career_base.CareerBase`, both using `@inject` from `src/helpers/injector.py`:
+
+**Hook `_end_work_callback`**: Fires at shift end. When the Sim is not `currently_at_work` and is eligible, call `career.handle_career_loot(hours)` using the full scheduled shift duration before the original runs. Skip if `taking_day_off_reason == MISSING_WORK` (Sim intentionally missed work). The original's `is_npc` guard prevents double-pay.
+
+**Hook `leave_work`**: Fires when a Sim who was marked `_at_work=True` finishes. When `left_early=False` and eligible, call `career.handle_career_loot(hours)` with the full shift duration before the original runs. The original's `is_npc` guard prevents double-pay.
+
+**Double-pay invariant**: The original `handle_career_loot` call is always gated by `not is_npc`. Since eligible Sims always have `is_npc=True`, the original never pays them. Our pre-call adds pay exactly once.
+
+### 15.4 Layer B — On-load backpay
+
+Hook `careers.career_service.CareerService.restore_career_state` (post-call). Scan all Sims in memory for played-household away Sims whose `_current_work_end` is set and is in the past. For each, compute `math.ceil(get_hourly_pay() * _current_work_duration.in_hours())` and add to `household.funds`.
+
+**V1 limitation**: Only detects one missed shift per career (the last-saved work session). Multi-day gaps require schedule traversal (deferred to v2). Gig/WorkFromHome/active careers are excluded from v1.
+
+### 15.5 Funds API
+
+```python
+household.funds.add(amount, Consts_pb2.TELEMETRY_MONEY_CAREER, sim=None)
+```
+
+`sim=None` is safe — it is used for telemetry only and the away Sim is not instanced.
+
+### 15.6 Notification
+
+V1: On-load backpay results are logged via `sims4.log.Logger`. A cheat command `rotwages.status` prints each played-household Sim's pending pay state. In-game popup notification is deferred to v2.
+
+### 15.7 Invariants
+
+- Eligible Sims are paid exactly once per shift period (no double-pay with vanilla)
+- Ineligible Sims (townies, active household, gig careers) are never touched
+- Sims who explicitly missed work (`MISSING_WORK`) receive §0 (same as vanilla)
+- The mod is idempotent on install: calling `install()` twice has no effect
+
+---
+
+## 16. Error Handling
 
 | Scenario | Behavior |
 |----------|----------|

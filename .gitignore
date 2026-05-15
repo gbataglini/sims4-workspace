@@ -174,3 +174,4 @@ settings.py
 Documents
 
 extraction
+.claude/settings.local.json
