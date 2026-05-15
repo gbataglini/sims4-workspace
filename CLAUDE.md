@@ -10,7 +10,11 @@ Sims 4 Workspace is a Python-based development environment for creating The Sims
 
 ## Constraints
 
-- **Python 3.7 only** — use `typing.List` not `list[X]`, no walrus operator (`:=`), no positional-only params (`/`)
+- **CRITICAL: Python 3.7 only** — The Sims 4 embeds Python 3.7. ALL code must be Python 3.7 compatible:
+  - Use `typing.List` not `list[X]`, `typing.Dict` not `dict[X, Y]`, `typing.Tuple` not `tuple[X]`
+  - No walrus operator (`:=`), no positional-only params (`/`)
+  - No f-strings with `=` debug syntax, no `dataclasses.field(kw_only=...)`
+  - Test compatibility: newer type hints will cause silent import failures in-game
 - **Spec-driven development** — update SPEC.md first, then write tests, then write code (SPEC.md Section 2.1)
 - **TDD Red-Green-Refactor** — write a failing test, make it pass, clean up (SPEC.md Section 2.1)
 - **Code review before push** — run `pytest`, review `git diff`, then push (SPEC.md Section 2.2)
